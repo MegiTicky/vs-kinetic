@@ -1,0 +1,83 @@
+buildscript {
+    repositories {
+        mavenCentral()
+    }
+    dependencies {
+        classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:1.9.22"
+    }
+}
+
+plugins {
+    id "com.github.johnrengelman.shadow" version "7.1.2"
+    id "org.jetbrains.kotlin.jvm"
+}
+
+architectury {
+    platformSetupLoomIde()
+    forge()
+}
+
+configurations {
+    common
+    shadowCommon
+    compileClasspath.extendsFrom common
+    runtimeClasspath.extendsFrom common
+    developmentForge.extendsFrom common
+}
+
+dependencies {
+    compileOnly "net.minecraftforge:forge:${rootProject.forge_version}:universal"
+    compileOnly "net.minecraftforge:eventbus:6.0.5"
+    compileOnly "net.minecraftforge:fmlloader:1.20.1-47.4.2"
+    compileOnly "net.minecraftforge:javafmllanguage:1.20.1-47.4.0"
+    compileOnly "net.minecraftforge:fmlcore:1.20.1-47.4.0"
+    common(project(path: ":common", configuration: "namedElements")) { transitive = false }
+    shadowCommon(project(path: ":common", configuration: "transformProductionForge")) { transitive = false }
+
+    modApi("dev.architectury:architectury-forge:${rootProject.architectury_version}")
+    modApi("org.valkyrienskies:valkyrienskies-120-forge:${rootProject.vs2_version}") {
+        transitive = false
+    }
+    implementation("org.valkyrienskies.core:api:${rootProject.vscore_version}") {
+        transitive = false
+        exclude group: "org.joml", module: ""
+    }
+    implementation("org.valkyrienskies.core:util:${rootProject.vscore_version}") {
+        transitive = false
+        exclude group: "org.joml", module: ""
+    }
+    implementation "thedarkcolour:kotlinforforge:${rootProject.kotlinforforge_version}"
+}
+
+processResources {
+    Map<String, String> properties = [
+        version: project.version.toString(),
+        forge_version: rootProject.forge_version,
+        minecraft_version: rootProject.minecraft_version
+    ]
+    properties.forEach { key, value -> inputs.property(key, value) }
+    filesMatching("META-INF/mods.toml") {
+        expand properties
+    }
+}
+
+shadowJar {
+    configurations = [project.configurations.shadowCommon]
+    archiveClassifier.set("dev-shadow")
+}
+
+remapJar {
+    input.set(shadowJar.archiveFile)
+    dependsOn shadowJar
+    archiveClassifier.set(null)
+}
+
+jar {
+    archiveClassifier.set("dev")
+}
+
+sourcesJar {
+    def commonSources = project(":common").sourcesJar
+    dependsOn commonSources
+    from commonSources.archiveFile.map { zipTree(it) }
+}

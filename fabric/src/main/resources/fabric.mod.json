@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "id": "vskinetic",
+  "version": "${version}",
+  "name": "VS: Kinetic",
+  "description": "Energy-based ship collision telemetry and block damage for Valkyrien Skies 2.",
+  "authors": ["VS: Kinetic contributors"],
+  "environment": "*",
+  "entrypoints": {
+    "main": ["org.valkyrienskies.vskinetic.fabric.VSKineticFabric"]
+  },
+  "depends": {
+    "fabricloader": ">=0.14.0",
+    "minecraft": "1.20.1",
+    "valkyrienskies": ">=2.4.7"
+  }
+}

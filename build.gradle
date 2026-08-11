@@ -1,0 +1,56 @@
+plugins {
+    id "architectury-plugin" version "3.4.146"
+    id "dev.architectury.loom" version "1.3.355" apply false
+    id "org.jetbrains.kotlin.jvm" version "2.0.0" apply false
+}
+
+architectury {
+    minecraft = rootProject.minecraft_version
+}
+
+subprojects {
+    apply plugin: "architectury-plugin"
+    apply plugin: "dev.architectury.loom"
+    apply plugin: "org.jetbrains.kotlin.jvm"
+
+    loom {
+        silentMojangMappingsLicense()
+    }
+
+    repositories {
+        mavenCentral()
+        maven { url = "https://maven.valkyrienskies.org" }
+        maven { url = "https://thedarkcolour.github.io/KotlinForForge/" }
+    }
+
+    dependencies {
+        minecraft "com.mojang:minecraft:${rootProject.minecraft_version}"
+        mappings loom.layered {
+            officialMojangMappings()
+        }
+    }
+
+    tasks.withType(JavaCompile).configureEach {
+        options.encoding = "UTF-8"
+        options.release = 17
+    }
+
+    tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinJvmCompile).configureEach {
+        kotlinOptions {
+            jvmTarget = "17"
+            freeCompilerArgs += "-Xjvm-default=all"
+        }
+    }
+
+    java {
+        withSourcesJar()
+    }
+}
+
+allprojects {
+    apply plugin: "java"
+    apply plugin: "maven-publish"
+    group = rootProject.maven_group
+    version = rootProject.mod_version
+    archivesBaseName = rootProject.archives_base_name
+}

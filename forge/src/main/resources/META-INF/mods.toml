@@ -1,0 +1,33 @@
+modLoader = "javafml"
+loaderVersion = "[47,)"
+license = "Apache-2.0"
+
+[[mods]]
+modId = "vskinetic"
+version = "${version}"
+displayName = "VS: Kinetic"
+authors = ["VS: Kinetic contributors"]
+description = '''
+Energy-based ship collision telemetry and block damage for Valkyrien Skies 2.
+'''
+
+[[dependencies.vskinetic]]
+modId = "forge"
+mandatory = true
+versionRange = "[47,)"
+ordering = "NONE"
+side = "BOTH"
+
+[[dependencies.vskinetic]]
+modId = "minecraft"
+mandatory = true
+versionRange = "[${minecraft_version}]"
+ordering = "NONE"
+side = "BOTH"
+
+[[dependencies.vskinetic]]
+modId = "valkyrienskies"
+mandatory = true
+versionRange = "[2.4.7,)"
+ordering = "AFTER"
+side = "BOTH"
