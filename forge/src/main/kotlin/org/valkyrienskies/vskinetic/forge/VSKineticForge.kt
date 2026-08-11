@@ -12,6 +12,8 @@ import net.minecraftforge.fml.javafmlmod.FMLJavaModLoadingContext
 import org.valkyrienskies.vskinetic.VSKineticMod
 import org.valkyrienskies.vskinetic.collision.CollisionProcessor
 import org.valkyrienskies.vskinetic.collision.CollisionTelemetry
+import org.valkyrienskies.mod.api.vsApi
+import org.valkyrienskies.vskinetic.collision.ShipPairCollisionDetector
 
 @Mod(VSKineticMod.MOD_ID)
 class VSKineticForge {
@@ -27,6 +29,10 @@ class VSKineticForge {
     @SubscribeEvent
     fun onServerTick(event: TickEvent.ServerTickEvent) {
         if (event.phase != TickEvent.Phase.END) return
+        vsApi.getServerShipWorld()?.let { shipWorld ->
+            ShipPairCollisionDetector.scan(shipWorld)
+            ShipGroundCollisionDetector.scan(shipWorld, event.server.allLevels)
+        }
         CollisionProcessor.process()
     }
 
@@ -54,7 +60,19 @@ class VSKineticForge {
     }
 
     private fun formatStatus(snapshot: org.valkyrienskies.vskinetic.collision.TelemetrySnapshot): String =
-        "VS: Kinetic telemetry: captured=${snapshot.captured}, processed=${snapshot.processed}, " +
-            "dropped=${snapshot.dropped}, pending=${org.valkyrienskies.vskinetic.collision.ImpactQueue.pendingCount()}"
+        "VS: Kinetic initialized=${snapshot.initialized}, physicsTicks=${snapshot.physicsTicks}, " +
+            "starts=${snapshot.startEvents}, persists=${snapshot.persistEvents}, ends=${snapshot.endEvents}, " +
+            "contacts=${snapshot.contacts}, zeroNormals=${snapshot.zeroNormals}, " +
+            "rawProbeTicks=${snapshot.rawProbeTicks}, rawEvents=${snapshot.rawEvents}, " +
+            "rawProbeFailures=${snapshot.rawProbeFailures}, captured=${snapshot.captured}, " +
+            "overlapCandidates=${snapshot.overlapCandidates}, lowSpeedCandidates=${snapshot.lowSpeedCandidates}, " +
+            "suppressedCandidates=${snapshot.suppressedCandidates}, " +
+            "approximateImpacts=${snapshot.approximateImpacts}, " +
+            "terrainCandidates=${snapshot.terrainCandidates}, " +
+            "terrainLowSpeedCandidates=${snapshot.terrainLowSpeedCandidates}, " +
+            "terrainSuppressedCandidates=${snapshot.terrainSuppressedCandidates}, " +
+            "approximateTerrainImpacts=${snapshot.approximateTerrainImpacts}, " +
+            "processed=${snapshot.processed}, dropped=${snapshot.dropped}, " +
+            "pending=${org.valkyrienskies.vskinetic.collision.ImpactQueue.pendingCount()}"
 
 }

@@ -28,6 +28,6 @@ side = "BOTH"
 [[dependencies.vskinetic]]
 modId = "valkyrienskies"
 mandatory = true
-versionRange = "[2.4.7,)"
+versionRange = "[2.4.11,)"
 ordering = "AFTER"
 side = "BOTH"

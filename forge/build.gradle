@@ -17,6 +17,11 @@ architectury {
     forge()
 }
 
+loom {
+    forge {
+    }
+}
+
 configurations {
     common
     shadowCommon
@@ -26,11 +31,7 @@ configurations {
 }
 
 dependencies {
-    compileOnly "net.minecraftforge:forge:${rootProject.forge_version}:universal"
-    compileOnly "net.minecraftforge:eventbus:6.0.5"
-    compileOnly "net.minecraftforge:fmlloader:1.20.1-47.4.2"
-    compileOnly "net.minecraftforge:javafmllanguage:1.20.1-47.4.0"
-    compileOnly "net.minecraftforge:fmlcore:1.20.1-47.4.0"
+    forge "net.minecraftforge:forge:${rootProject.forge_version}"
     common(project(path: ":common", configuration: "namedElements")) { transitive = false }
     shadowCommon(project(path: ":common", configuration: "transformProductionForge")) { transitive = false }
 
