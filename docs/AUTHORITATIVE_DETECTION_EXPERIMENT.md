@@ -164,3 +164,20 @@ Using PhysX is viable for this addon, but it has tradeoffs:
 - Collision events are now confirmed to work with PhysX, but this does not prove that every contact category or event lifecycle behaves identically across all backends.
 
 For the current addon goal, PhysX provides the working authoritative collision callback path. Keep `collisionPersistEvent` as the main capture listener, and treat `collisionStartEvent` as an optional PhysX-only enhancement. Before making PhysX the required backend, test normal ship handling, terrain interaction, ship-to-ship response, performance, and world reload behavior against the intended gameplay setup.
+
+## PhysX-First Runtime Policy
+
+The normal runtime now disables the Forge approximate ship-pair detector by default. PhysX authoritative ship-pair callbacks are working, and avoiding the fallback prevents approximate ship-pair impacts from competing with or duplicating authoritative impacts. The approximate ship-to-terrain detector remains enabled in normal mode because authoritative terrain damage contacts have not yet been confirmed.
+
+`/vskinetic status` reports this policy as `approximateShipPairs=false`. The authoritative-only experiment still disables both fallback detectors and damage planning. This is intentional: the normal runtime uses PhysX-authoritative ship-pair detection plus approximate terrain detection until the terrain event path is validated.
+
+## Collision Reliability Attempt
+
+The first normal PhysX-first runtime test showed inconsistent repeated ship-to-ship detection. At `22:45:19`, the runtime reported `starts=333`, `persists=220167`, `captured=216`, `approximateShipPairs=false`, and `ends=0`. The high callback count with no end events exposed a flaw in the addon-side episode suppression: a ship pair was kept in `activeEpisodes` until `collisionEndEvent`, so a pair could remain permanently suppressed when PhysX did not emit an end callback.
+
+The capture implementation was changed to use a physics-tick timeout instead of depending exclusively on `collisionEndEvent`. A pair is rearmed after more than `10` physics ticks without another callback. The status output now reports:
+
+- `authoritativeEpisodeRearms`: pairs automatically rearmed after the timeout.
+- `authoritativeEpisodeSuppressed`: callbacks suppressed because they were still within the same active episode.
+
+This is an implementation attempt, not yet proof that all inconsistent collisions are fixed. The required follow-up test is to collide the same two ships repeatedly, allowing them to separate for more than ten physics ticks between impacts, and verify that `captured`, `plansAuthoritative`, and `authoritativeEpisodeRearms` increase for later impacts. `ends` may remain zero without invalidating the timeout path.

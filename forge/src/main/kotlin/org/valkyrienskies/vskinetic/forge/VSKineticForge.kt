@@ -10,6 +10,7 @@ import net.minecraftforge.fml.common.Mod
 import net.minecraftforge.fml.event.lifecycle.FMLCommonSetupEvent
 import net.minecraftforge.fml.javafmlmod.FMLJavaModLoadingContext
 import org.valkyrienskies.vskinetic.VSKineticMod
+import org.valkyrienskies.vskinetic.collision.CollisionExperiment
 import org.valkyrienskies.vskinetic.collision.CollisionProcessor
 import org.valkyrienskies.vskinetic.collision.CollisionTelemetry
 import org.valkyrienskies.vskinetic.collision.DebugOverlay
@@ -30,11 +31,18 @@ class VSKineticForge {
     @SubscribeEvent
     fun onServerTick(event: TickEvent.ServerTickEvent) {
         if (event.phase != TickEvent.Phase.END) return
+        RawCollisionBridgeProbe.probe(event.server)
         vsApi.getServerShipWorld()?.let { shipWorld ->
-            ForgeShipPairCollisionDetector.scan(shipWorld, event.server.allLevels)
-            ShipGroundCollisionDetector.scan(shipWorld, event.server.allLevels)
-            CollisionProcessor.process { records ->
-                DamagePlanner.plan(records, shipWorld, event.server.allLevels)
+            if (!CollisionExperiment.isAuthoritativeOnly()) {
+                if (CollisionExperiment.isApproximateShipPairsEnabled()) {
+                    ForgeShipPairCollisionDetector.scan(shipWorld, event.server.allLevels)
+                }
+                ShipGroundCollisionDetector.scan(shipWorld, event.server.allLevels)
+                CollisionProcessor.process { records ->
+                    DamagePlanner.plan(records, shipWorld, event.server.allLevels)
+                }
+            } else {
+                CollisionProcessor.process()
             }
             DamageExecutor.process(shipWorld, event.server.allLevels)
             return
@@ -145,6 +153,52 @@ class VSKineticForge {
                                 }
                         )
                 )
+                .then(
+                    net.minecraft.commands.Commands.literal("experiment")
+                        .then(
+                            net.minecraft.commands.Commands.literal("authoritative")
+                                .then(
+                                    net.minecraft.commands.Commands.literal("on")
+                                        .executes { context ->
+                                             CollisionExperiment.setAuthoritativeOnly(true)
+                                             CollisionExperiment.setApproximateShipPairs(false)
+                                            ForgeShipPairCollisionDetector.reset()
+                                            ShipGroundCollisionDetector.reset()
+                                            DamageExecutor.setEnabled(false)
+                                            CollisionTelemetry.setDamageEnabled(false)
+                                            context.source.sendSuccess(
+                                                { Component.literal("VS: Kinetic authoritative-only experiment enabled; fallback detectors and damage disabled.") },
+                                                true
+                                            )
+                                            1
+                                        }
+                                )
+                                .then(
+                                    net.minecraft.commands.Commands.literal("off")
+                                        .executes { context ->
+                                             CollisionExperiment.setAuthoritativeOnly(false)
+                                             CollisionExperiment.setApproximateShipPairs(false)
+                                            ForgeShipPairCollisionDetector.reset()
+                                            ShipGroundCollisionDetector.reset()
+                                            context.source.sendSuccess(
+                                                { Component.literal("VS: Kinetic authoritative-only experiment disabled; fallback detectors are active.") },
+                                                true
+                                            )
+                                            1
+                                        }
+                                )
+                                .then(
+                                    net.minecraft.commands.Commands.literal("status")
+                                        .executes { context ->
+                                            context.source.sendSuccess(
+                                                { Component.literal("VS: Kinetic authoritative-only experiment=${CollisionExperiment.isAuthoritativeOnly()}") },
+                                                true
+                                            )
+                                            1
+                                        }
+                                )
+                        )
+                )
         )
     }
 
@@ -156,11 +210,14 @@ class VSKineticForge {
     } ?: "none"
 
     private fun formatStatus(snapshot: org.valkyrienskies.vskinetic.collision.TelemetrySnapshot): String =
-        "VS: Kinetic initialized=${snapshot.initialized}, physicsTicks=${snapshot.physicsTicks}, " +
+        "VS: Kinetic initialized=${snapshot.initialized}, authoritativeOnly=${snapshot.authoritativeOnly}, " +
+            "approximateShipPairs=${CollisionExperiment.isApproximateShipPairsEnabled()}, " +
+            "physicsTicks=${snapshot.physicsTicks}, " +
             "starts=${snapshot.startEvents}, persists=${snapshot.persistEvents}, ends=${snapshot.endEvents}, " +
             "contacts=${snapshot.contacts}, zeroNormals=${snapshot.zeroNormals}, " +
             "rawProbeTicks=${snapshot.rawProbeTicks}, rawEvents=${snapshot.rawEvents}, " +
             "rawProbeFailures=${snapshot.rawProbeFailures}, captured=${snapshot.captured}, " +
+            "lastRawProbeFailure=${snapshot.lastRawProbeFailure}, " +
             "overlapCandidates=${snapshot.overlapCandidates}, lowSpeedCandidates=${snapshot.lowSpeedCandidates}, " +
             "suppressedCandidates=${snapshot.suppressedCandidates}, " +
             "approximateImpacts=${snapshot.approximateImpacts}, " +
@@ -172,9 +229,12 @@ class VSKineticForge {
             "stopNoContact=${snapshot.stopNoContact}, " +
             "plansEvaluated=${snapshot.plansEvaluated}, plansCreated=${snapshot.plansCreated}, " +
             "plansAuthoritative=${snapshot.plansAuthoritative}, plansApproximate=${snapshot.plansApproximate}, " +
+            "authoritativeEpisodeRearms=${snapshot.authoritativeEpisodeRearms}, " +
+            "authoritativeEpisodeSuppressed=${snapshot.authoritativeEpisodeSuppressed}, " +
             "plansRejectedLowEnergy=${snapshot.plansRejectedLowEnergy}, " +
             "unresolvedContacts=${snapshot.unresolvedContacts}, candidateBlocks=${snapshot.candidateBlocks}, " +
             "plannedBlocks=${snapshot.plannedBlocks}, cappedPlans=${snapshot.cappedPlans}, " +
+            "lastAuthoritativeEvent=${snapshot.lastAuthoritativeEvent}, " +
             "lastImpact=${formatImpact(snapshot.lastImpact)}, lastPlan=${snapshot.lastPlan}, " +
             "damageEnabled=${snapshot.damageEnabled}, damagePlansQueued=${snapshot.damagePlansQueued}, " +
             "damagePlansDropped=${snapshot.damagePlansDropped}, " +

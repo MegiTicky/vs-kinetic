@@ -40,6 +40,15 @@ object ShipGroundCollisionDetector {
     private val contactingTerrain = HashSet<TerrainContactKey>()
     private val terrainClearTicks = HashMap<TerrainContactKey, Int>()
 
+    fun reset() {
+        previousBounds.clear()
+        previousMotion.clear()
+        previousGeometry.clear()
+        geometryCache.clear()
+        contactingTerrain.clear()
+        terrainClearTicks.clear()
+    }
+
     fun scan(world: ServerShipWorld, levels: Iterable<ServerLevel>) {
         val tick = scanTick++
         val currentBounds = LinkedHashMap<Long, Bounds>()

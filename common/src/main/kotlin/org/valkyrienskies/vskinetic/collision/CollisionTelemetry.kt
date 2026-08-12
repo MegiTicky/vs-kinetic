@@ -5,6 +5,7 @@ import java.util.concurrent.atomic.AtomicReference
 
 data class TelemetrySnapshot(
     val initialized: Boolean,
+    val authoritativeOnly: Boolean,
     val physicsTicks: Long,
     val startEvents: Long,
     val persistEvents: Long,
@@ -32,6 +33,8 @@ data class TelemetrySnapshot(
     val plansCreated: Long,
     val plansAuthoritative: Long,
     val plansApproximate: Long,
+    val authoritativeEpisodeRearms: Long,
+    val authoritativeEpisodeSuppressed: Long,
     val plansRejectedLowEnergy: Long,
     val unresolvedContacts: Long,
     val candidateBlocks: Long,
@@ -48,6 +51,8 @@ data class TelemetrySnapshot(
     val damageFailures: Long,
     val lastExecution: String?,
     val lastPlan: String?,
+    val lastAuthoritativeEvent: String?,
+    val lastRawProbeFailure: String?,
     val lastImpact: ImpactRecord?
 )
 
@@ -78,6 +83,8 @@ object CollisionTelemetry {
     private val plansCreated = AtomicLong()
     private val plansAuthoritative = AtomicLong()
     private val plansApproximate = AtomicLong()
+    private val authoritativeEpisodeRearms = AtomicLong()
+    private val authoritativeEpisodeSuppressed = AtomicLong()
     private val plansRejectedLowEnergy = AtomicLong()
     private val unresolvedContacts = AtomicLong()
     private val candidateBlocks = AtomicLong()
@@ -94,6 +101,8 @@ object CollisionTelemetry {
     private val damageFailures = AtomicLong()
     private val lastImpact = AtomicReference<ImpactRecord?>()
     private val lastPlan = AtomicReference<String?>()
+    private val lastAuthoritativeEvent = AtomicReference<String?>()
+    private val lastRawProbeFailure = AtomicReference<String?>()
     private val lastExecution = AtomicReference<String?>()
 
     fun markInitialized() = initialized.set(true)
@@ -106,6 +115,9 @@ object CollisionTelemetry {
     fun recordRawProbeTick() = rawProbeTicks.incrementAndGet()
     fun recordRawEvents(count: Int) = rawEvents.addAndGet(count.toLong())
     fun recordRawProbeFailure() = rawProbeFailures.incrementAndGet()
+    fun recordRawProbeFailure(failure: Throwable) = lastRawProbeFailure.set(
+        "${failure.javaClass.simpleName}: ${failure.message ?: "no message"}"
+    ).also { rawProbeFailures.incrementAndGet() }
     fun recordOverlapCandidate() = overlapCandidates.incrementAndGet()
     fun recordLowSpeedCandidate() = lowSpeedCandidates.incrementAndGet()
     fun recordSuppressedCandidate() = suppressedCandidates.incrementAndGet()
@@ -120,7 +132,10 @@ object CollisionTelemetry {
     fun recordPlanEvaluated() = plansEvaluated.incrementAndGet()
     fun recordPlanAuthoritative() = plansAuthoritative.incrementAndGet()
     fun recordPlanApproximate() = plansApproximate.incrementAndGet()
+    fun recordAuthoritativeEpisodeRearm() = authoritativeEpisodeRearms.incrementAndGet()
+    fun recordAuthoritativeEpisodeSuppressed() = authoritativeEpisodeSuppressed.incrementAndGet()
     fun recordLastImpact(impact: ImpactRecord) = lastImpact.set(impact)
+    fun recordAuthoritativeEvent(summary: String) = lastAuthoritativeEvent.set(summary)
     fun recordPlanCreated(blockCount: Int) {
         plansCreated.incrementAndGet()
         plannedBlocks.addAndGet(blockCount.toLong())
@@ -154,6 +169,7 @@ object CollisionTelemetry {
 
     fun snapshot() = TelemetrySnapshot(
         initialized = initialized.get(),
+        authoritativeOnly = CollisionExperiment.isAuthoritativeOnly(),
         physicsTicks = physicsTicks.get(),
         startEvents = startEvents.get(),
         persistEvents = persistEvents.get(),
@@ -181,6 +197,8 @@ object CollisionTelemetry {
         plansCreated = plansCreated.get(),
         plansAuthoritative = plansAuthoritative.get(),
         plansApproximate = plansApproximate.get(),
+        authoritativeEpisodeRearms = authoritativeEpisodeRearms.get(),
+        authoritativeEpisodeSuppressed = authoritativeEpisodeSuppressed.get(),
         plansRejectedLowEnergy = plansRejectedLowEnergy.get(),
         unresolvedContacts = unresolvedContacts.get(),
         candidateBlocks = candidateBlocks.get(),
@@ -197,6 +215,8 @@ object CollisionTelemetry {
         damageFailures = damageFailures.get(),
         lastExecution = lastExecution.get(),
         lastPlan = lastPlan.get(),
+        lastAuthoritativeEvent = lastAuthoritativeEvent.get(),
+        lastRawProbeFailure = lastRawProbeFailure.get(),
         lastImpact = lastImpact.get()
     )
 }

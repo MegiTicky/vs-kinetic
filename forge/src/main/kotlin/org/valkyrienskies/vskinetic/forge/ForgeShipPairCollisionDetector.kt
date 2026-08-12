@@ -32,6 +32,15 @@ object ForgeShipPairCollisionDetector {
     private val previousGeometry = HashMap<Long, List<WorldBox>>()
     private var scanTick = 0L
 
+    fun reset() {
+        cache.clear()
+        overlappingPairs.clear()
+        previousBounds.clear()
+        previousMotion.clear()
+        previousGeometry.clear()
+        scanTick = 0L
+    }
+
     fun scan(world: ServerShipWorld, levels: Iterable<ServerLevel>) {
         val tick = scanTick++
         val ships = world.loadedShips.toList()

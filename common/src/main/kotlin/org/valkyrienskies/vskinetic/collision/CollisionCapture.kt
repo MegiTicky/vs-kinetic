@@ -3,13 +3,17 @@ package org.valkyrienskies.vskinetic.collision
 import org.joml.Vector3d
 import org.valkyrienskies.core.api.VsBeta
 import org.valkyrienskies.core.api.events.CollisionEvent
-import java.util.concurrent.atomic.AtomicLong
+import org.slf4j.LoggerFactory
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicLong
+import java.util.Locale
 
 @OptIn(VsBeta::class)
 object CollisionCapture {
+    private val logger = LoggerFactory.getLogger("VS: Kinetic/AuthoritativeExperiment")
     private val physicsTick = AtomicLong()
-    private val activeEpisodes = ConcurrentHashMap.newKeySet<PairKey>()
+    private const val EPISODE_REARM_TICKS = 10L
+    private val activeEpisodes = ConcurrentHashMap<PairKey, Long>()
 
     fun nextPhysicsTick() {
         physicsTick.incrementAndGet()
@@ -18,18 +22,41 @@ object CollisionCapture {
 
     fun onStart(event: CollisionEvent) {
         CollisionTelemetry.recordStartEvent()
+        recordExperimentEvent(event, ImpactPhase.START)
         capture(event, ImpactPhase.START)
     }
 
     fun onPersist(event: CollisionEvent) {
         CollisionTelemetry.recordPersistEvent()
+        recordExperimentEvent(event, ImpactPhase.PERSIST)
         capture(event, ImpactPhase.PERSIST)
     }
 
     fun onEnd(event: CollisionEvent) {
         CollisionTelemetry.recordEndEvent()
         CollisionTelemetry.recordContactEvent(event.contactPoints.size)
+        recordExperimentEvent(event, ImpactPhase.END)
         activeEpisodes.remove(episodeKey(event))
+    }
+
+    private fun recordExperimentEvent(event: CollisionEvent, phase: ImpactPhase) {
+        if (!CollisionExperiment.isAuthoritativeOnly()) return
+        val contacts = event.contactPoints.joinToString(separator = ";") { contact ->
+            val position = contact.position
+            val normal = contact.normal
+            val velocity = contact.velocity
+            String.format(
+                Locale.ROOT,
+                "p=(%.2f,%.2f,%.2f),n=(%.3f,%.3f,%.3f),v=(%.2f,%.2f,%.2f),s=%.3f",
+                position.x(), position.y(), position.z(),
+                normal.x(), normal.y(), normal.z(),
+                velocity.x(), velocity.y(), velocity.z(), contact.separation
+            )
+        }
+        val summary = "phase=$phase,dim=${event.dimensionId},bodyA=${event.shipIdA}," +
+            "bodyB=${event.shipIdB},contacts=${event.contactPoints.size},tick=${physicsTick.get()}"
+        CollisionTelemetry.recordAuthoritativeEvent(summary)
+        logger.info("{} {}", summary, contacts.ifEmpty { "none" })
     }
 
     private fun capture(event: CollisionEvent, phase: ImpactPhase) {
@@ -44,8 +71,14 @@ object CollisionCapture {
         val isGroundCollision = aIsShip != bIsShip
         if (event.contactPoints.isEmpty()) return
         val episode = episodeKey(event, resolvedBodyA, resolvedBodyB)
-        val enqueue = activeEpisodes.add(episode)
-        if (!enqueue) return
+        val currentTick = physicsTick.get()
+        val previousTick = activeEpisodes.put(episode, currentTick)
+        if (previousTick != null && currentTick - previousTick > EPISODE_REARM_TICKS) {
+            CollisionTelemetry.recordAuthoritativeEpisodeRearm()
+        } else if (previousTick != null) {
+            CollisionTelemetry.recordAuthoritativeEpisodeSuppressed()
+            return
+        }
 
         event.contactPoints.forEach { contact ->
             val normal = Vector3d(contact.normal.x(), contact.normal.y(), contact.normal.z())
@@ -98,13 +131,13 @@ object CollisionCapture {
                         normalWorld = normal,
                         separation = contact.separation.toDouble(),
                         relativeVelocityWorld = relativeVelocity,
-                        physicsTick = physicsTick.get(),
+                        physicsTick = currentTick,
                         source = ImpactSource.AUTHORITATIVE,
                         phase = phase
                     )
                 )
             ) {
-                activeEpisodes.remove(episode)
+                activeEpisodes.remove(episode, currentTick)
             }
         }
     }
