@@ -27,36 +27,74 @@ object ForgeShipPairCollisionDetector {
     private const val EPSILON = 1.0E-5
     private val cache = HashMap<Long, GeometryCache>()
     private val overlappingPairs = LinkedHashMap<PairKey, Double>()
+    private val previousBounds = HashMap<Long, Box3d>()
+    private val previousMotion = HashMap<Long, MotionState>()
+    private val previousGeometry = HashMap<Long, List<WorldBox>>()
     private var scanTick = 0L
 
     fun scan(world: ServerShipWorld, levels: Iterable<ServerLevel>) {
         val tick = scanTick++
         val ships = world.loadedShips.toList()
         val currentPairs = LinkedHashMap<PairKey, Double>()
-        val worldBoxes = HashMap<Long, List<WorldBox>>()
+        val currentBounds = HashMap<Long, Box3d>()
+        val currentMotion = HashMap<Long, MotionState>()
+        val currentGeometry = HashMap<Long, List<WorldBox>>()
+
+        for (ship in ships) {
+            if (ship.isStatic && ships.none { it.id != ship.id && !it.isStatic }) continue
+            val level = levels.firstOrNull { belongsToLevel(ship, it) } ?: continue
+            val geometry = geometry(ship, level, tick) ?: continue
+            currentGeometry[ship.id] = geometry.boxes.map { transform(it, ship) }
+        }
+
+        for (ship in ships) {
+            worldBounds(ship)?.let { currentBounds[ship.id] = it }
+            currentMotion[ship.id] = MotionState(
+                linearVelocity = Vector3d(ship.velocity),
+                angularVelocity = Vector3d(ship.omega),
+                centerOfMass = Vector3d(ship.transform.positionInWorld)
+            )
+        }
 
         for (index in ships.indices) {
-            val shipA = ships[index]
-            if (shipA.isStatic) continue
-            val boundsA = worldBounds(shipA) ?: continue
             for (otherIndex in index + 1 until ships.size) {
-                val shipB = ships[otherIndex]
-                if (shipB.isStatic || shipA.chunkClaimDimension != shipB.chunkClaimDimension) continue
-                val boundsB = worldBounds(shipB) ?: continue
-                if (!overlaps(boundsA, boundsB)) continue
-                val level = levels.firstOrNull { belongsToLevel(shipA, it) } ?: continue
-                val boxesA = worldBoxes.getOrPut(shipA.id) {
-                    geometry(shipA, level, tick)?.boxes?.map { transform(it, shipA) }.orEmpty()
-                }
-                val boxesB = worldBoxes.getOrPut(shipB.id) {
-                    geometry(shipB, level, tick)?.boxes?.map { transform(it, shipB) }.orEmpty()
-                }
+                val first = ships[index]
+                val second = ships[otherIndex]
+                if (first.isStatic && second.isStatic) continue
+                if (first.chunkClaimDimension != second.chunkClaimDimension) continue
+                val shipA = if (!first.isStatic) first else second
+                val shipB = if (!first.isStatic) second else first
+                val boundsA = currentBounds[shipA.id] ?: continue
+                val boundsB = currentBounds[shipB.id] ?: continue
+                val sweptA = previousBounds[shipA.id]?.union(boundsA) ?: boundsA
+                val sweptB = previousBounds[shipB.id]?.union(boundsB) ?: boundsB
+                if (!overlaps(sweptA, sweptB)) continue
+                val boxesA = currentGeometry[shipA.id] ?: continue
+                val boxesB = currentGeometry[shipB.id] ?: continue
                 if (boxesA.isEmpty() || boxesB.isEmpty()) continue
 
-                val contact = bestContact(boxesA, boxesB) ?: continue
+                val currentContact = bestContact(boxesA, boxesB)
+                val sweptContact = bestSweptContact(
+                    boxesA, previousGeometry[shipA.id], boxesB, previousGeometry[shipB.id]
+                )
+                val contact = listOfNotNull(currentContact, sweptContact).maxByOrNull { candidate ->
+                    val motion = if (candidate.swept) {
+                        velocityAt(previousMotion[shipA.id] ?: currentMotion.getValue(shipA.id), candidate.position)
+                            .sub(velocityAt(previousMotion[shipB.id] ?: currentMotion.getValue(shipB.id), candidate.position))
+                    } else {
+                        velocityAt(currentMotion.getValue(shipA.id), candidate.position)
+                            .sub(velocityAt(currentMotion.getValue(shipB.id), candidate.position))
+                    }
+                    -motion.dot(candidate.normal)
+                } ?: continue
                 val key = PairKey.of(shipA.id, shipB.id)
-                val relativeVelocity = velocityAt(shipA, contact.position)
-                    .sub(velocityAt(shipB, contact.position))
+                val relativeVelocity = if (contact.swept) {
+                    velocityAt(previousMotion[shipA.id] ?: currentMotion.getValue(shipA.id), contact.position)
+                        .sub(velocityAt(previousMotion[shipB.id] ?: currentMotion.getValue(shipB.id), contact.position))
+                } else {
+                    velocityAt(currentMotion.getValue(shipA.id), contact.position)
+                        .sub(velocityAt(currentMotion.getValue(shipB.id), contact.position))
+                }
                 val closingSpeed = -relativeVelocity.dot(contact.normal)
                 currentPairs[key] = closingSpeed
                 CollisionTelemetry.recordOverlapCandidate()
@@ -95,6 +133,12 @@ object ForgeShipPairCollisionDetector {
 
         overlappingPairs.clear()
         overlappingPairs.putAll(currentPairs)
+        previousBounds.clear()
+        previousBounds.putAll(currentBounds)
+        previousMotion.clear()
+        previousMotion.putAll(currentMotion)
+        previousGeometry.clear()
+        previousGeometry.putAll(currentGeometry)
         cache.keys.removeIf { id -> ships.none { it.id == id } }
     }
 
@@ -163,6 +207,79 @@ object ForgeShipPairCollisionDetector {
         return best
     }
 
+    private fun bestSweptContact(
+        currentA: List<WorldBox>, previousA: List<WorldBox>?,
+        currentB: List<WorldBox>, previousB: List<WorldBox>?
+    ): Contact? {
+        var best: Contact? = null
+        for ((indexA, boxA) in currentA.withIndex()) {
+            val oldA = previousA?.getOrNull(indexA) ?: boxA
+            val sweepA = SweepBox(oldA.aabb, boxA.aabb)
+            for ((indexB, boxB) in currentB.withIndex()) {
+                val oldB = previousB?.getOrNull(indexB) ?: boxB
+                val contact = sweptAabbContact(sweepA, SweepBox(oldB.aabb, boxB.aabb)) ?: continue
+                if (best == null || contact.penetration < best.penetration) best = contact
+            }
+        }
+        return best
+    }
+
+    private fun sweptAabbContact(a: SweepBox, b: SweepBox): Contact? {
+        val startA = a.start.center
+        val startB = b.start.center
+        val delta = Vector3d(startA).sub(startB)
+        val relativeMotion = Vector3d(a.end.center).sub(a.start.center)
+            .sub(Vector3d(b.end.center).sub(b.start.center))
+        val halfA = a.start.halfExtents().max(a.end.halfExtents())
+        val halfB = b.start.halfExtents().max(b.end.halfExtents())
+        val extent = Vector3d(halfA).add(halfB)
+        var enter = 0.0
+        var exit = 1.0
+        var normal = Vector3d()
+        for (axis in 0..2) {
+            val position = delta[axis]
+            val motion = relativeMotion[axis]
+            val limit = extent[axis]
+            if (kotlin.math.abs(motion) <= EPSILON) {
+                if (kotlin.math.abs(position) > limit) return null
+                continue
+            }
+            var near = (-limit - position) / motion
+            var far = (limit - position) / motion
+            if (near > far) {
+                val swap = near
+                near = far
+                far = swap
+            }
+            if (near > enter) {
+                enter = near
+                normal = Vector3d()
+                val sign = if (position + motion * enter >= 0.0) 1.0 else -1.0
+                when (axis) {
+                    0 -> normal.x = sign
+                    1 -> normal.y = sign
+                    else -> normal.z = sign
+                }
+            }
+            exit = minOf(exit, far)
+            if (enter > exit || exit < 0.0 || enter > 1.0) return null
+        }
+        val time = enter.coerceIn(0.0, 1.0)
+        val centerA = interpolate(a.start.center, a.end.center, time)
+        val centerB = interpolate(b.start.center, b.end.center, time)
+        if (Vector3d(centerA).sub(centerB).dot(normal) < 0.0) normal.negate()
+        val pointA = Vector3d(centerA).fma(-normal.x * halfA.x, Vector3d(1.0, 0.0, 0.0))
+            .fma(-normal.y * halfA.y, Vector3d(0.0, 1.0, 0.0))
+            .fma(-normal.z * halfA.z, Vector3d(0.0, 0.0, 1.0))
+        val pointB = Vector3d(centerB).fma(normal.x * halfB.x, Vector3d(1.0, 0.0, 0.0))
+            .fma(normal.y * halfB.y, Vector3d(0.0, 1.0, 0.0))
+            .fma(normal.z * halfB.z, Vector3d(0.0, 0.0, 1.0))
+        return Contact(Vector3d(pointA).add(pointB).mul(0.5), normal, 0.0, true)
+    }
+
+    private fun interpolate(start: Vector3d, end: Vector3d, time: Double): Vector3d =
+        Vector3d(start).lerp(end, time)
+
     private fun obbContact(a: WorldBox, b: WorldBox): Contact? {
         val axes = ArrayList<Vector3d>(15)
         axes += a.axes
@@ -205,9 +322,9 @@ object ForgeShipPairCollisionDetector {
         return result
     }
 
-    private fun velocityAt(ship: LoadedServerShip, position: Vector3d): Vector3d =
-        Vector3d(ship.velocity).add(
-            Vector3d(ship.omega).cross(Vector3d(position).sub(Vector3d(ship.transform.positionInWorld)))
+    private fun velocityAt(motion: MotionState, position: Vector3d): Vector3d =
+        Vector3d(motion.linearVelocity).add(
+            Vector3d(motion.angularVelocity).cross(Vector3d(position).sub(motion.centerOfMass))
         )
 
     private fun bounds(boxes: List<WorldBox>): Box3d? = boxes.map { it.aabb }.reduceOrNull { first, second -> first.union(second) }
@@ -233,11 +350,18 @@ object ForgeShipPairCollisionDetector {
     private data class LocalBox(val box: Box3d, val blockPos: BlockPos)
     private data class GeometryCache(val signature: List<Int>, val builtTick: Long, val boxes: List<LocalBox>)
     private data class WorldBox(val center: Vector3d, val axes: Array<Vector3d>, val halfExtents: DoubleArray, val aabb: Box3d, val blockPos: BlockPos)
-    private data class Contact(val position: Vector3d, val normal: Vector3d, val penetration: Double)
+    private data class Contact(val position: Vector3d, val normal: Vector3d, val penetration: Double, val swept: Boolean = false)
+    private data class SweepBox(val start: Box3d, val end: Box3d)
+    private data class MotionState(
+        val linearVelocity: Vector3d,
+        val angularVelocity: Vector3d,
+        val centerOfMass: Vector3d
+    )
     private data class PairKey(val low: Long, val high: Long) { companion object { fun of(a: Long, b: Long) = if (a < b) PairKey(a, b) else PairKey(b, a) } }
 
     private data class Box3d(val minX: Double, val minY: Double, val minZ: Double, val maxX: Double, val maxY: Double, val maxZ: Double) {
         val center: Vector3d get() = Vector3d((minX + maxX) * 0.5, (minY + maxY) * 0.5, (minZ + maxZ) * 0.5)
+        fun halfExtents() = Vector3d((maxX - minX) * 0.5, (maxY - minY) * 0.5, (maxZ - minZ) * 0.5)
         fun isValid() = maxX > minX && maxY > minY && maxZ > minZ
         fun union(other: Box3d) = Box3d(minOf(minX, other.minX), minOf(minY, other.minY), minOf(minZ, other.minZ), maxOf(maxX, other.maxX), maxOf(maxY, other.maxY), maxOf(maxZ, other.maxZ))
         fun intersection(other: Box3d): Box3d? = Box3d(
