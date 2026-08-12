@@ -25,6 +25,29 @@ data class TelemetrySnapshot(
     val terrainLowSpeedCandidates: Long,
     val terrainSuppressedCandidates: Long,
     val approximateTerrainImpacts: Long,
+    val stopEvents: Long,
+    val stopImpacts: Long,
+    val stopNoContact: Long,
+    val plansEvaluated: Long,
+    val plansCreated: Long,
+    val plansAuthoritative: Long,
+    val plansApproximate: Long,
+    val plansRejectedLowEnergy: Long,
+    val unresolvedContacts: Long,
+    val candidateBlocks: Long,
+    val plannedBlocks: Long,
+    val cappedPlans: Long,
+    val damageEnabled: Boolean,
+    val damagePlansQueued: Long,
+    val damagePlansDropped: Long,
+    val damageOperationsAttempted: Long,
+    val damageBlocksBroken: Long,
+    val damageStaleStateSkips: Long,
+    val damageBlockEntitySkips: Long,
+    val damageUnresolvedTargets: Long,
+    val damageFailures: Long,
+    val lastExecution: String?,
+    val lastPlan: String?,
     val lastImpact: ImpactRecord?
 )
 
@@ -48,7 +71,30 @@ object CollisionTelemetry {
     private val terrainLowSpeedCandidates = AtomicLong()
     private val terrainSuppressedCandidates = AtomicLong()
     private val approximateTerrainImpacts = AtomicLong()
+    private val stopEvents = AtomicLong()
+    private val stopImpacts = AtomicLong()
+    private val stopNoContact = AtomicLong()
+    private val plansEvaluated = AtomicLong()
+    private val plansCreated = AtomicLong()
+    private val plansAuthoritative = AtomicLong()
+    private val plansApproximate = AtomicLong()
+    private val plansRejectedLowEnergy = AtomicLong()
+    private val unresolvedContacts = AtomicLong()
+    private val candidateBlocks = AtomicLong()
+    private val plannedBlocks = AtomicLong()
+    private val cappedPlans = AtomicLong()
+    private val damageEnabled = java.util.concurrent.atomic.AtomicBoolean()
+    private val damagePlansQueued = AtomicLong()
+    private val damagePlansDropped = AtomicLong()
+    private val damageOperationsAttempted = AtomicLong()
+    private val damageBlocksBroken = AtomicLong()
+    private val damageStaleStateSkips = AtomicLong()
+    private val damageBlockEntitySkips = AtomicLong()
+    private val damageUnresolvedTargets = AtomicLong()
+    private val damageFailures = AtomicLong()
     private val lastImpact = AtomicReference<ImpactRecord?>()
+    private val lastPlan = AtomicReference<String?>()
+    private val lastExecution = AtomicReference<String?>()
 
     fun markInitialized() = initialized.set(true)
     fun recordPhysicsTick() = physicsTicks.incrementAndGet()
@@ -68,6 +114,37 @@ object CollisionTelemetry {
     fun recordTerrainLowSpeedCandidate() = terrainLowSpeedCandidates.incrementAndGet()
     fun recordTerrainSuppressedCandidate() = terrainSuppressedCandidates.incrementAndGet()
     fun recordApproximateTerrainImpact() = approximateTerrainImpacts.incrementAndGet()
+    fun recordStopEvent() = stopEvents.incrementAndGet()
+    fun recordStopImpact() = stopImpacts.incrementAndGet()
+    fun recordStopNoContact() = stopNoContact.incrementAndGet()
+    fun recordPlanEvaluated() = plansEvaluated.incrementAndGet()
+    fun recordPlanAuthoritative() = plansAuthoritative.incrementAndGet()
+    fun recordPlanApproximate() = plansApproximate.incrementAndGet()
+    fun recordLastImpact(impact: ImpactRecord) = lastImpact.set(impact)
+    fun recordPlanCreated(blockCount: Int) {
+        plansCreated.incrementAndGet()
+        plannedBlocks.addAndGet(blockCount.toLong())
+    }
+    fun recordPlanRejectedLowEnergy() = plansRejectedLowEnergy.incrementAndGet()
+    fun recordUnresolvedContact() = unresolvedContacts.incrementAndGet()
+    fun recordCandidateBlock() = candidateBlocks.incrementAndGet()
+    fun recordCappedPlan() = cappedPlans.incrementAndGet()
+    fun recordLastPlan(summary: String) = lastPlan.set(summary)
+    fun setDamageEnabled(value: Boolean) = damageEnabled.set(value)
+    fun recordDamagePlanQueued() = damagePlansQueued.incrementAndGet()
+    fun recordDamagePlanDropped() = damagePlansDropped.incrementAndGet()
+    fun recordDamageAttempt() = damageOperationsAttempted.incrementAndGet()
+    fun recordDamageBlockBroken(position: String) {
+        damageBlocksBroken.incrementAndGet()
+        lastExecution.set("broke=$position")
+    }
+    fun recordDamageStaleStateSkip() = damageStaleStateSkips.incrementAndGet()
+    fun recordDamageBlockEntitySkip() = damageBlockEntitySkips.incrementAndGet()
+    fun recordDamageUnresolvedTarget() = damageUnresolvedTargets.incrementAndGet()
+    fun recordDamageFailure(position: String) {
+        damageFailures.incrementAndGet()
+        lastExecution.set("failed=$position")
+    }
 
     fun recordProcessed(records: Collection<ImpactRecord>) {
         if (records.isEmpty()) return
@@ -97,6 +174,29 @@ object CollisionTelemetry {
         terrainLowSpeedCandidates = terrainLowSpeedCandidates.get(),
         terrainSuppressedCandidates = terrainSuppressedCandidates.get(),
         approximateTerrainImpacts = approximateTerrainImpacts.get(),
+        stopEvents = stopEvents.get(),
+        stopImpacts = stopImpacts.get(),
+        stopNoContact = stopNoContact.get(),
+        plansEvaluated = plansEvaluated.get(),
+        plansCreated = plansCreated.get(),
+        plansAuthoritative = plansAuthoritative.get(),
+        plansApproximate = plansApproximate.get(),
+        plansRejectedLowEnergy = plansRejectedLowEnergy.get(),
+        unresolvedContacts = unresolvedContacts.get(),
+        candidateBlocks = candidateBlocks.get(),
+        plannedBlocks = plannedBlocks.get(),
+        cappedPlans = cappedPlans.get(),
+        damageEnabled = damageEnabled.get(),
+        damagePlansQueued = damagePlansQueued.get(),
+        damagePlansDropped = damagePlansDropped.get(),
+        damageOperationsAttempted = damageOperationsAttempted.get(),
+        damageBlocksBroken = damageBlocksBroken.get(),
+        damageStaleStateSkips = damageStaleStateSkips.get(),
+        damageBlockEntitySkips = damageBlockEntitySkips.get(),
+        damageUnresolvedTargets = damageUnresolvedTargets.get(),
+        damageFailures = damageFailures.get(),
+        lastExecution = lastExecution.get(),
+        lastPlan = lastPlan.get(),
         lastImpact = lastImpact.get()
     )
 }

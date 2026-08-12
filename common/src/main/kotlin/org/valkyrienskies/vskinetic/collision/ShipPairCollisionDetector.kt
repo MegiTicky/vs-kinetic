@@ -46,6 +46,12 @@ object ShipPairCollisionDetector {
                 if (previousState == null && overlappingPairs.size >= MAX_TRACKED_PAIRS) continue
 
                 val contact = intersectionCenter(boundsA, boundsB)
+                DebugOverlay.record(
+                    contact,
+                    "pair contact closing=${"%.1f".format(closingSpeed)} m/s",
+                    DebugColors.PAIR_CONTACT,
+                    direction
+                )
                 ImpactQueue.offer(
                     ImpactRecord(
                         dimensionId = shipA.chunkClaimDimension,
@@ -55,7 +61,9 @@ object ShipPairCollisionDetector {
                         normalWorld = direction,
                         separation = 0.0,
                         relativeVelocityWorld = velocity,
-                        physicsTick = 0L
+                        physicsTick = 0L,
+                        source = ImpactSource.APPROXIMATE,
+                        phase = ImpactPhase.START
                     )
                 )
                 CollisionTelemetry.recordApproximateImpact()
