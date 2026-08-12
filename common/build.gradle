@@ -4,9 +4,7 @@ architectury {
 
 dependencies {
     modApi "dev.architectury:architectury:${rootProject.architectury_version}"
-    modApi("org.valkyrienskies:valkyrienskies-120-common:${rootProject.vs2_version}") {
-        transitive = false
-    }
+    modApi files(rootProject.file(rootProject.vs2_runtime_jar))
     implementation("org.valkyrienskies.core:api:${rootProject.vscore_version}") {
         exclude group: "org.joml", module: ""
     }

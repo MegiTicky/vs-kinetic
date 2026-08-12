@@ -7,6 +7,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 /** Marker colors shared by the debug overlay renderer. */
 object DebugColors {
     const val VS_CONTACT = 0xFFFFFF
+    const val VS_CONTACT_VELOCITY = 0xFF4040
     const val TERRAIN_CONTACT = 0x00FF00
     const val LOW_SPEED = 0x808080
     const val PAIR_CONTACT = 0xFF00FF

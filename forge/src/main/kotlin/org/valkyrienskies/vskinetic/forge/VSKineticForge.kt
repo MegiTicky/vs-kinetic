@@ -15,7 +15,6 @@ import org.valkyrienskies.vskinetic.collision.CollisionTelemetry
 import org.valkyrienskies.vskinetic.collision.DebugOverlay
 import org.valkyrienskies.vskinetic.collision.ImpactRecord
 import org.valkyrienskies.mod.api.vsApi
-import org.valkyrienskies.vskinetic.collision.ShipPairCollisionDetector
 
 @Mod(VSKineticMod.MOD_ID)
 class VSKineticForge {
@@ -32,7 +31,7 @@ class VSKineticForge {
     fun onServerTick(event: TickEvent.ServerTickEvent) {
         if (event.phase != TickEvent.Phase.END) return
         vsApi.getServerShipWorld()?.let { shipWorld ->
-            ShipPairCollisionDetector.scan(shipWorld)
+            ForgeShipPairCollisionDetector.scan(shipWorld, event.server.allLevels)
             ShipGroundCollisionDetector.scan(shipWorld, event.server.allLevels)
             CollisionProcessor.process { records ->
                 DamagePlanner.plan(records, shipWorld, event.server.allLevels)

@@ -16,7 +16,7 @@ import org.valkyrienskies.vskinetic.collision.ImpactSource
 /** Read-only point-impact planner. It never mutates a level or removes a block. */
 object DamagePlanner {
     private const val MAX_RECORDS_PER_TICK = 128
-    private const val MAX_BLOCKS_PER_PLAN = 8
+    private const val MAX_BLOCKS_PER_PLAN = 1
     private const val MAX_ENERGY = 1.0e9
     private const val ENERGY_SCALE = 0.01
     private const val MIN_PLAN_ENERGY = 1.0
@@ -30,8 +30,8 @@ object DamagePlanner {
             .groupBy { collisionKey(it, world) }
             .mapNotNull { (_, group) ->
                 group.maxWithOrNull(
-                    compareBy<ImpactRecord> { it.closingSpeed }
-                        .thenBy { if (it.source == ImpactSource.AUTHORITATIVE) 1 else 0 }
+                    compareBy<ImpactRecord> { if (it.source == ImpactSource.AUTHORITATIVE) 1 else 0 }
+                        .thenBy { it.incomingNormalSpeed }
                 )
             }
             .sortedBy { if (it.source == ImpactSource.AUTHORITATIVE) 0 else 1 }
@@ -57,6 +57,10 @@ object DamagePlanner {
 
             val movingShip = movingShip(impact, world)
             val target = target(impact, world)
+            if (target == CollisionTarget.Ground && impact.normalAlignment < 0.5) {
+                CollisionTelemetry.recordPlanRejectedLowEnergy()
+                return@forEach
+            }
             val energy = impactEnergy(impact, movingShip, target, world).coerceIn(0.0, MAX_ENERGY)
             if (energy < MIN_PLAN_ENERGY) {
                 DebugOverlay.record(
@@ -232,11 +236,9 @@ object DamagePlanner {
     }
 
     private fun groundDirection(impact: ImpactRecord, normal: Vector3d): Vector3d {
-        val relativeVelocity = Vector3d(impact.relativeVelocityWorld)
-        if (relativeVelocity.lengthSquared() > 1.0E-8) {
-            val direction = relativeVelocity.normalize()
-            return cardinalDirection(direction)
-        }
+        // The terrain normal has already been validated against point velocity by the
+        // detector. Search into terrain from that face instead of using unrelated tangential
+        // ship velocity, which could select a block beside a support contact.
         return cardinalDirection(Vector3d(normal).negate())
     }
 

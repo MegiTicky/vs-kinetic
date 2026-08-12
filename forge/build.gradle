@@ -36,9 +36,7 @@ dependencies {
     shadowCommon(project(path: ":common", configuration: "transformProductionForge")) { transitive = false }
 
     modApi("dev.architectury:architectury-forge:${rootProject.architectury_version}")
-    modApi("org.valkyrienskies:valkyrienskies-120-forge:${rootProject.vs2_version}") {
-        transitive = false
-    }
+    modApi files(rootProject.file(rootProject.vs2_runtime_jar))
     implementation("org.valkyrienskies.core:api:${rootProject.vscore_version}") {
         transitive = false
         exclude group: "org.joml", module: ""
@@ -47,6 +45,7 @@ dependencies {
         transitive = false
         exclude group: "org.joml", module: ""
     }
+    implementation "org.joml:joml-primitives:1.10.0"
     implementation "thedarkcolour:kotlinforforge:${rootProject.kotlinforforge_version}"
 }
 

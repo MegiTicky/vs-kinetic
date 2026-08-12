@@ -29,6 +29,17 @@ data class ImpactRecord(
     val source: ImpactSource = ImpactSource.AUTHORITATIVE,
     val phase: ImpactPhase = ImpactPhase.START
 ) {
+    /** Relative speed into the contact surface. Separating motion is not impact energy. */
+    val incomingNormalSpeed: Double
+        get() = (-relativeVelocityWorld.dot(normalWorld)).coerceAtLeast(0.0)
+
     val closingSpeed: Double
-        get() = kotlin.math.abs(relativeVelocityWorld.dot(normalWorld))
+        get() = incomingNormalSpeed
+
+    /** Fraction of relative motion directed along the contact normal. */
+    val normalAlignment: Double
+        get() {
+            val speed = relativeVelocityWorld.length()
+            return if (speed <= 1.0E-8) 0.0 else (incomingNormalSpeed / speed).coerceIn(0.0, 1.0)
+        }
 }

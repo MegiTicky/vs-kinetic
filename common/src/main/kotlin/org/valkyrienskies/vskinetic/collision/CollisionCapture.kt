@@ -36,6 +36,9 @@ object CollisionCapture {
         val aIsShip = event.physLevel.getShipById(event.shipIdA) != null
         val bIsShip = event.physLevel.getShipById(event.shipIdB) != null
         val terrainHasReversedBodyOrder = !aIsShip && bIsShip
+        val resolvedBodyA = if (aIsShip) bodyA else CollisionTarget.Ground
+        val resolvedBodyB = if (bIsShip) bodyB else CollisionTarget.Ground
+        val isGroundCollision = aIsShip != bIsShip
 
         event.contactPoints.forEach { contact ->
             val normal = Vector3d(contact.normal.x(), contact.normal.y(), contact.normal.z())
@@ -53,18 +56,40 @@ object CollisionCapture {
 
             if (enqueue) {
                 val worldPosition = Vector3d(contact.position.x(), contact.position.y(), contact.position.z())
-                val closing = kotlin.math.abs(relativeVelocity.dot(normal))
-                DebugOverlay.record(
-                    worldPosition,
-                    "VS contact closing=${"%.1f".format(closing)} m/s",
-                    DebugColors.VS_CONTACT,
-                    normal
-                )
+                val incomingNormalSpeed = (-relativeVelocity.dot(normal)).coerceAtLeast(0.0)
+                val relativeSpeed = relativeVelocity.length()
+                val alignment = if (relativeSpeed <= 1.0E-8) 0.0 else incomingNormalSpeed / relativeSpeed
+                if (isGroundCollision &&
+                    relativeSpeed > 1.0E-8
+                ) {
+                    DebugOverlay.record(
+                        worldPosition,
+                        "VS ground n=${"%.1f".format(incomingNormalSpeed)} align=${"%.2f".format(alignment)}",
+                        DebugColors.VS_CONTACT,
+                        normal,
+                        DebugMarkerStyle.POINT
+                    )
+                    DebugOverlay.record(
+                        worldPosition,
+                        "VS ground velocity=${"%.1f".format(relativeSpeed)} m/s",
+                        DebugColors.VS_CONTACT_VELOCITY,
+                        Vector3d(relativeVelocity).normalize(),
+                        DebugMarkerStyle.POINT
+                    )
+                } else if (!isGroundCollision) {
+                    DebugOverlay.record(
+                        worldPosition,
+                        "VS contact incoming=${"%.1f".format(incomingNormalSpeed)} m/s",
+                        DebugColors.VS_CONTACT,
+                        normal,
+                        DebugMarkerStyle.POINT
+                    )
+                }
                 ImpactQueue.offer(
                     ImpactRecord(
                         dimensionId = event.dimensionId,
-                        bodyA = bodyA,
-                        bodyB = bodyB,
+                        bodyA = resolvedBodyA,
+                        bodyB = resolvedBodyB,
                         contactPositionWorld = worldPosition,
                         normalWorld = normal,
                         separation = contact.separation.toDouble(),
