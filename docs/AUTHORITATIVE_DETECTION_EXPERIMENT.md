@@ -181,3 +181,19 @@ The capture implementation was changed to use a physics-tick timeout instead of 
 - `authoritativeEpisodeSuppressed`: callbacks suppressed because they were still within the same active episode.
 
 This is an implementation attempt, not yet proof that all inconsistent collisions are fixed. The required follow-up test is to collide the same two ships repeatedly, allowing them to separate for more than ten physics ticks between impacts, and verify that `captured`, `plansAuthoritative`, and `authoritativeEpisodeRearms` increase for later impacts. `ends` may remain zero without invalidating the timeout path.
+
+## Authoritative Damage Velocity Attempt
+
+The runtime then showed a separate damage issue: authoritative ship-to-ship impacts were captured, but the selected `closing` speed was frequently `0.00 m/s`. This caused `DamagePlanner` to reject the event as low energy even though the collision callback itself was present. PhysX contact velocity is treated as a post-solver/contact velocity and is therefore not reliable as the pre-impact damage speed.
+
+The damage pipeline now reconstructs relative velocity at the contact point from physics-thread pre-step snapshots of the two ships' linear velocity, angular velocity, and world-space center of mass. VS Core emits `physTickEvent` after refreshing body state and before advancing the solver; collision events are constructed after the solver step. The status output reports `motionVelocityUses`, `callbackVelocityUses`, `missingMotionSnapshots`, and `lastVelocityResolution` so runtime behavior can be verified directly.
+
+This is another implementation attempt that requires runtime validation. After restarting the instance, repeat ship-to-ship impacts with damage enabled and verify that authoritative `lastImpact` and `lastPlan` show nonzero `closing` and that `plansRejectedLowEnergy` no longer increases for impacts with meaningful ship motion. The terrain fallback continues to use its existing approximate velocity path.
+
+## Motion-History Attempt Result
+
+The first motion-history implementation was built and deployed, but the follow-up runtime test still reported ship-to-ship authoritative impacts at approximately `0 m/s`. Investigation found that `CollisionMotionHistory.sample()` was never wired into the tick loop, and the attempted center-of-mass value was the ship transform origin rather than the transformed `PhysShip.centerOfMass`.
+
+The corrected implementation captures immutable rigid-body snapshots during `physTickEvent`, enumerates the physics level's ships on the physics thread, transforms center of mass from ship coordinates to world coordinates, and resolves contact-point velocity in the collision callback. It uses the same physics-step snapshot when available and falls back to the callback velocity only when snapshots are missing. `lastVelocityResolution` records callback normal speed, selected pre-step normal speed, source, and snapshot age.
+
+Ship-pair damage continues to use the absolute normal component because a ship-pair contact normal can be oriented in either direction without changing the physical impact magnitude. Terrain contacts retain the signed incoming-speed calculation so separating terrain motion is still rejected.

@@ -231,6 +231,9 @@ class VSKineticForge {
             "plansAuthoritative=${snapshot.plansAuthoritative}, plansApproximate=${snapshot.plansApproximate}, " +
             "authoritativeEpisodeRearms=${snapshot.authoritativeEpisodeRearms}, " +
             "authoritativeEpisodeSuppressed=${snapshot.authoritativeEpisodeSuppressed}, " +
+            "motionVelocityUses=${snapshot.motionVelocityUses}, callbackVelocityUses=${snapshot.callbackVelocityUses}, " +
+            "missingMotionSnapshots=${snapshot.missingMotionSnapshots}, " +
+            "lastVelocityResolution=${snapshot.lastVelocityResolution}, " +
             "plansRejectedLowEnergy=${snapshot.plansRejectedLowEnergy}, " +
             "unresolvedContacts=${snapshot.unresolvedContacts}, candidateBlocks=${snapshot.candidateBlocks}, " +
             "plannedBlocks=${snapshot.plannedBlocks}, cappedPlans=${snapshot.cappedPlans}, " +

@@ -15,8 +15,9 @@ object CollisionCapture {
     private const val EPISODE_REARM_TICKS = 10L
     private val activeEpisodes = ConcurrentHashMap<PairKey, Long>()
 
-    fun nextPhysicsTick() {
+    fun nextPhysicsTick(event: org.valkyrienskies.core.api.events.PhysTickEvent) {
         physicsTick.incrementAndGet()
+        CollisionMotionHistory.capture(event, physicsTick.get())
         CollisionTelemetry.recordPhysicsTick()
     }
 
@@ -88,13 +89,31 @@ object CollisionCapture {
             } else {
                 normal.normalize()
             }
-            val relativeVelocity = Vector3d(contact.velocity.x(), contact.velocity.y(), contact.velocity.z())
+            val callbackVelocity = Vector3d(contact.velocity.x(), contact.velocity.y(), contact.velocity.z())
+            var relativeVelocity = callbackVelocity
             if (terrainHasReversedBodyOrder) {
                 normal.negate()
                 relativeVelocity.negate()
             }
 
             val worldPosition = Vector3d(contact.position.x(), contact.position.y(), contact.position.z())
+            val velocityResolution = if (!isGroundCollision) {
+                CollisionMotionHistory.resolveShipPair(
+                    dimensionId = event.dimensionId,
+                    shipAId = event.shipIdA,
+                    shipBId = event.shipIdB,
+                    contactPositionWorld = worldPosition,
+                    callbackVelocityWorld = relativeVelocity,
+                    contactNormalWorld = normal,
+                    physicsTick = currentTick
+                )
+            } else {
+                null
+            }
+            if (velocityResolution != null) {
+                relativeVelocity = velocityResolution.relativeVelocity
+                CollisionTelemetry.recordVelocityResolution(velocityResolution)
+            }
             val incomingNormalSpeed = (-relativeVelocity.dot(normal)).coerceAtLeast(0.0)
             val relativeSpeed = relativeVelocity.length()
             val alignment = if (relativeSpeed <= 1.0E-8) 0.0 else incomingNormalSpeed / relativeSpeed

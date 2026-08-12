@@ -14,7 +14,7 @@ object VSKineticMod {
         vsApi.collisionStartEvent.on(CollisionCapture::onStart)
         vsApi.collisionPersistEvent.on(CollisionCapture::onPersist)
         vsApi.collisionEndEvent.on(CollisionCapture::onEnd)
-        vsApi.physTickEvent.on { CollisionCapture.nextPhysicsTick() }
+        vsApi.physTickEvent.on(CollisionCapture::nextPhysicsTick)
         CollisionTelemetry.markInitialized()
     }
 }

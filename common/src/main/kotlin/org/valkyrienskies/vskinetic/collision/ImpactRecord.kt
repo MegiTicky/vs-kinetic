@@ -2,6 +2,7 @@ package org.valkyrienskies.vskinetic.collision
 
 import org.joml.Vector3d
 import org.valkyrienskies.core.api.world.properties.DimensionId
+import kotlin.math.abs
 
 enum class ImpactSource {
     AUTHORITATIVE,
@@ -31,7 +32,15 @@ data class ImpactRecord(
 ) {
     /** Relative speed into the contact surface. Separating motion is not impact energy. */
     val incomingNormalSpeed: Double
-        get() = (-relativeVelocityWorld.dot(normalWorld)).coerceAtLeast(0.0)
+        get() {
+            val normalComponent = -relativeVelocityWorld.dot(normalWorld)
+            return if (bodyA is CollisionTarget.Body && bodyB is CollisionTarget.Body) {
+                // PhysX does not guarantee a stable normal orientation for ship pairs.
+                abs(normalComponent)
+            } else {
+                normalComponent.coerceAtLeast(0.0)
+            }
+        }
 
     val closingSpeed: Double
         get() = incomingNormalSpeed

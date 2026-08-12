@@ -35,6 +35,10 @@ data class TelemetrySnapshot(
     val plansApproximate: Long,
     val authoritativeEpisodeRearms: Long,
     val authoritativeEpisodeSuppressed: Long,
+    val motionVelocityUses: Long,
+    val callbackVelocityUses: Long,
+    val missingMotionSnapshots: Long,
+    val lastVelocityResolution: String?,
     val plansRejectedLowEnergy: Long,
     val unresolvedContacts: Long,
     val candidateBlocks: Long,
@@ -85,6 +89,9 @@ object CollisionTelemetry {
     private val plansApproximate = AtomicLong()
     private val authoritativeEpisodeRearms = AtomicLong()
     private val authoritativeEpisodeSuppressed = AtomicLong()
+    private val motionVelocityUses = AtomicLong()
+    private val callbackVelocityUses = AtomicLong()
+    private val missingMotionSnapshots = AtomicLong()
     private val plansRejectedLowEnergy = AtomicLong()
     private val unresolvedContacts = AtomicLong()
     private val candidateBlocks = AtomicLong()
@@ -102,6 +109,7 @@ object CollisionTelemetry {
     private val lastImpact = AtomicReference<ImpactRecord?>()
     private val lastPlan = AtomicReference<String?>()
     private val lastAuthoritativeEvent = AtomicReference<String?>()
+    private val lastVelocityResolution = AtomicReference<String?>()
     private val lastRawProbeFailure = AtomicReference<String?>()
     private val lastExecution = AtomicReference<String?>()
 
@@ -134,6 +142,21 @@ object CollisionTelemetry {
     fun recordPlanApproximate() = plansApproximate.incrementAndGet()
     fun recordAuthoritativeEpisodeRearm() = authoritativeEpisodeRearms.incrementAndGet()
     fun recordAuthoritativeEpisodeSuppressed() = authoritativeEpisodeSuppressed.incrementAndGet()
+    fun recordVelocityResolution(resolution: CollisionMotionHistory.VelocityResolution) {
+        when (resolution.source) {
+            CollisionMotionHistory.VelocitySource.PHYSICS_PRE_STEP,
+            CollisionMotionHistory.VelocitySource.PHYSICS_PREVIOUS -> motionVelocityUses.incrementAndGet()
+            CollisionMotionHistory.VelocitySource.CALLBACK -> {
+                callbackVelocityUses.incrementAndGet()
+                missingMotionSnapshots.incrementAndGet()
+            }
+        }
+        lastVelocityResolution.set(
+            "source=${resolution.source}, callbackNormal=${"%.3f".format(java.util.Locale.ROOT, resolution.callbackNormalSpeed)}, " +
+                "selectedNormal=${"%.3f".format(java.util.Locale.ROOT, resolution.selectedNormalSpeed)}, " +
+                "snapshotAge=${resolution.snapshotAge ?: "missing"}"
+        )
+    }
     fun recordLastImpact(impact: ImpactRecord) = lastImpact.set(impact)
     fun recordAuthoritativeEvent(summary: String) = lastAuthoritativeEvent.set(summary)
     fun recordPlanCreated(blockCount: Int) {
@@ -199,6 +222,10 @@ object CollisionTelemetry {
         plansApproximate = plansApproximate.get(),
         authoritativeEpisodeRearms = authoritativeEpisodeRearms.get(),
         authoritativeEpisodeSuppressed = authoritativeEpisodeSuppressed.get(),
+        motionVelocityUses = motionVelocityUses.get(),
+        callbackVelocityUses = callbackVelocityUses.get(),
+        missingMotionSnapshots = missingMotionSnapshots.get(),
+        lastVelocityResolution = lastVelocityResolution.get(),
         plansRejectedLowEnergy = plansRejectedLowEnergy.get(),
         unresolvedContacts = unresolvedContacts.get(),
         candidateBlocks = candidateBlocks.get(),
