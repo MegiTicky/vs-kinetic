@@ -234,6 +234,9 @@ class VSKineticForge {
             "motionVelocityUses=${snapshot.motionVelocityUses}, callbackVelocityUses=${snapshot.callbackVelocityUses}, " +
             "missingMotionSnapshots=${snapshot.missingMotionSnapshots}, " +
             "lastVelocityResolution=${snapshot.lastVelocityResolution}, " +
+            "shipPairCandidateProbes=${snapshot.shipPairCandidateProbes}, " +
+            "shipPairCandidatesResolved=${snapshot.shipPairCandidatesResolved}, " +
+            "lastShipPairCandidate=${snapshot.lastShipPairCandidate}, " +
             "plansRejectedLowEnergy=${snapshot.plansRejectedLowEnergy}, " +
             "unresolvedContacts=${snapshot.unresolvedContacts}, candidateBlocks=${snapshot.candidateBlocks}, " +
             "plannedBlocks=${snapshot.plannedBlocks}, cappedPlans=${snapshot.cappedPlans}, " +

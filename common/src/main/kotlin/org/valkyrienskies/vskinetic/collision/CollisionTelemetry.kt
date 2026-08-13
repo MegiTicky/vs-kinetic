@@ -39,6 +39,9 @@ data class TelemetrySnapshot(
     val callbackVelocityUses: Long,
     val missingMotionSnapshots: Long,
     val lastVelocityResolution: String?,
+    val shipPairCandidateProbes: Long,
+    val shipPairCandidatesResolved: Long,
+    val lastShipPairCandidate: String?,
     val plansRejectedLowEnergy: Long,
     val unresolvedContacts: Long,
     val candidateBlocks: Long,
@@ -92,6 +95,8 @@ object CollisionTelemetry {
     private val motionVelocityUses = AtomicLong()
     private val callbackVelocityUses = AtomicLong()
     private val missingMotionSnapshots = AtomicLong()
+    private val shipPairCandidateProbes = AtomicLong()
+    private val shipPairCandidatesResolved = AtomicLong()
     private val plansRejectedLowEnergy = AtomicLong()
     private val unresolvedContacts = AtomicLong()
     private val candidateBlocks = AtomicLong()
@@ -110,6 +115,7 @@ object CollisionTelemetry {
     private val lastPlan = AtomicReference<String?>()
     private val lastAuthoritativeEvent = AtomicReference<String?>()
     private val lastVelocityResolution = AtomicReference<String?>()
+    private val lastShipPairCandidate = AtomicReference<String?>()
     private val lastRawProbeFailure = AtomicReference<String?>()
     private val lastExecution = AtomicReference<String?>()
 
@@ -158,6 +164,11 @@ object CollisionTelemetry {
         )
     }
     fun recordLastImpact(impact: ImpactRecord) = lastImpact.set(impact)
+    fun recordShipPairCandidateProbe() = shipPairCandidateProbes.incrementAndGet()
+    fun recordShipPairCandidateResolved(shipId: Long, position: net.minecraft.core.BlockPos) {
+        shipPairCandidatesResolved.incrementAndGet()
+        lastShipPairCandidate.set("ship=$shipId, pos=${position.toShortString()}")
+    }
     fun recordAuthoritativeEvent(summary: String) = lastAuthoritativeEvent.set(summary)
     fun recordPlanCreated(blockCount: Int) {
         plansCreated.incrementAndGet()
@@ -226,6 +237,9 @@ object CollisionTelemetry {
         callbackVelocityUses = callbackVelocityUses.get(),
         missingMotionSnapshots = missingMotionSnapshots.get(),
         lastVelocityResolution = lastVelocityResolution.get(),
+        shipPairCandidateProbes = shipPairCandidateProbes.get(),
+        shipPairCandidatesResolved = shipPairCandidatesResolved.get(),
+        lastShipPairCandidate = lastShipPairCandidate.get(),
         plansRejectedLowEnergy = plansRejectedLowEnergy.get(),
         unresolvedContacts = unresolvedContacts.get(),
         candidateBlocks = candidateBlocks.get(),

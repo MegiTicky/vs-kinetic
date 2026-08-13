@@ -61,7 +61,22 @@ object DamagePlanner {
                 CollisionTelemetry.recordPlanRejectedLowEnergy()
                 return@forEach
             }
-            val energy = impactEnergy(impact, movingShip, target, world).coerceIn(0.0, MAX_ENERGY)
+            val resolvedCandidates = if (target == CollisionTarget.Ground) {
+                ResolvedCandidates(target, resolveCandidates(level, world, impact, target))
+            } else {
+                resolveShipPairCandidates(level, world, impact)
+            }
+            if (resolvedCandidates == null || resolvedCandidates.candidates.isEmpty()) {
+                DebugOverlay.record(
+                    impact.contactPositionWorld,
+                    "reject: no candidate blocks",
+                    DebugColors.UNRESOLVED
+                )
+                CollisionTelemetry.recordUnresolvedContact()
+                return@forEach
+            }
+
+            val energy = impactEnergy(impact, movingShip, resolvedCandidates.target, world).coerceIn(0.0, MAX_ENERGY)
             if (energy < MIN_PLAN_ENERGY) {
                 DebugOverlay.record(
                     impact.contactPositionWorld,
@@ -72,25 +87,15 @@ object DamagePlanner {
                 return@forEach
             }
 
-            val candidates = resolveCandidates(level, world, impact, target)
-            if (candidates.isEmpty()) {
-                DebugOverlay.record(
-                    impact.contactPositionWorld,
-                    "reject: no candidate blocks",
-                    DebugColors.UNRESOLVED
-                )
-                CollisionTelemetry.recordUnresolvedContact()
-                return@forEach
-            }
             val operations = ArrayList<PlannedBlock>(MAX_BLOCKS_PER_PLAN)
             var remainingEnergy = energy
-            for (candidate in candidates) {
+            for (candidate in resolvedCandidates.candidates) {
                 CollisionTelemetry.recordCandidateBlock()
                 val material = MaterialProfileResolver.resolve(level, candidate.position, candidate.state)
                 if (!material.canBreak || material.treatment == MaterialTreatment.NO_DAMAGE) continue
                 val cost = material.toughness.coerceAtMost(MAX_ENERGY)
                 if (remainingEnergy < cost) break
-                operations += PlannedBlock(target, candidate.position, candidate.state, cost, material)
+                operations += PlannedBlock(resolvedCandidates.target, candidate.position, candidate.state, cost, material)
                 remainingEnergy -= cost
             }
             if (operations.isEmpty()) {
@@ -102,10 +107,10 @@ object DamagePlanner {
                 CollisionTelemetry.recordPlanRejectedLowEnergy()
                 return@forEach
             }
-            if (candidates.size >= MAX_BLOCKS_PER_PLAN && operations.size >= MAX_BLOCKS_PER_PLAN) {
+            if (resolvedCandidates.candidates.size >= MAX_BLOCKS_PER_PLAN && operations.size >= MAX_BLOCKS_PER_PLAN) {
                 CollisionTelemetry.recordCappedPlan()
             }
-            val plan = DamagePlan(impact.dimensionId, target, energy, operations)
+            val plan = DamagePlan(impact.dimensionId, resolvedCandidates.target, energy, operations)
             CollisionTelemetry.recordPlanCreated(plan.blocks.size)
             val first = plan.blocks.first()
             DebugOverlay.record(
@@ -235,6 +240,38 @@ object DamagePlanner {
         return candidates
     }
 
+    private fun resolveShipPairCandidates(
+        level: ServerLevel,
+        world: ServerShipWorld,
+        impact: ImpactRecord
+    ): ResolvedCandidates? {
+        val targets = listOfNotNull(
+            impact.bodyA as? CollisionTarget.Body,
+            impact.bodyB as? CollisionTarget.Body
+        )
+        var best: ShipyardCandidate? = null
+        for (target in targets) {
+            val ship = world.loadedShips.getById(target.id) ?: continue
+            val localContact = ship.worldToShip.transformPosition(impact.contactPositionWorld, Vector3d())
+            val center = BlockPos.containing(localContact.x, localContact.y, localContact.z)
+            for (x in center.x - 1..center.x + 1) for (y in center.y - 1..center.y + 1) for (z in center.z - 1..center.z + 1) {
+                CollisionTelemetry.recordShipPairCandidateProbe()
+                val position = BlockPos(x, y, z)
+                val state = level.getBlockState(position)
+                if (state.isAir || state.getCollisionShape(level, position, CollisionContext.empty()).isEmpty()) continue
+                val worldCenter = ship.shipToWorld.transformPosition(
+                    Vector3d(position.x + 0.5, position.y + 0.5, position.z + 0.5)
+                )
+                val distanceSquared = worldCenter.distanceSquared(impact.contactPositionWorld)
+                val candidate = ShipyardCandidate(target, Candidate(position, state), distanceSquared)
+                if (best == null || candidate.distanceSquared < best.distanceSquared) best = candidate
+            }
+        }
+        val selected = best ?: return null
+        CollisionTelemetry.recordShipPairCandidateResolved(selected.target.id, selected.candidate.position)
+        return ResolvedCandidates(selected.target, listOf(selected.candidate))
+    }
+
     private fun groundDirection(impact: ImpactRecord, normal: Vector3d): Vector3d {
         // The terrain normal has already been validated against point velocity by the
         // detector. Search into terrain from that face instead of using unrelated tangential
@@ -258,4 +295,10 @@ object DamagePlanner {
         dimensionId.endsWith(":${level.dimension().location()}")
 
     private data class Candidate(val position: BlockPos, val state: net.minecraft.world.level.block.state.BlockState)
+    private data class ResolvedCandidates(val target: CollisionTarget, val candidates: List<Candidate>)
+    private data class ShipyardCandidate(
+        val target: CollisionTarget.Body,
+        val candidate: Candidate,
+        val distanceSquared: Double
+    )
 }
